@@ -1397,7 +1397,14 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         return getConnection(maxWait);
     }
 
+    /**
+     * 获取连接入口
+     * @param maxWaitMillis
+     * @return
+     * @throws SQLException
+     */
     public DruidPooledConnection getConnection(long maxWaitMillis) throws SQLException {
+        //初始化操作
         init();
 
         if (filters.size() > 0) {
