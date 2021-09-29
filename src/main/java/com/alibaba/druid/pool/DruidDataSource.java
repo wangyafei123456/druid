@@ -798,13 +798,16 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
     }
 
     public void init() throws SQLException {
+        //判断是否初始化完成
         if (inited) {
             return;
         }
 
         // bug fixed for dead lock, for issue #2980
+        //加载驱动
         DruidDriver.getInstance();
 
+        //TODO?
         final ReentrantLock lock = this.lock;
         try {
             lock.lockInterruptibly();
@@ -834,6 +837,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 initFromWrapDriverUrl();
             }
 
+            //初始化配置的filter比如：StatFilter，WallFilter，LogFilter，ConfigFilter等
             for (Filter filter : filters) {
                 filter.init(this);
             }
@@ -886,10 +890,13 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 this.driverClass = driverClass.trim();
             }
 
+            //TODO?
             initFromSPIServiceLoader();
 
+            //TODO?
             resolveDriver();
 
+            //初始化检查使用哪种数据库
             initCheck();
 
             initExceptionSorter();
@@ -1251,6 +1258,8 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             isMySql = true;
         }
 
+        //自动回收被遗弃的连接，由于耗性能，所以生产过程中不建议使用。当怀疑连接泄露的情况下可以开启。
+        //TODO? 怎么回收的？为什么耗性能？
         if (removeAbandoned) {
             LOG.warn("removeAbandoned is true, not use in production.");
         }
@@ -1399,7 +1408,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
     /**
      * 获取连接入口
-     * @param maxWaitMillis
+     * @param maxWaitMillis 获取连接时最大等待时间
      * @return
      * @throws SQLException
      */
@@ -1407,6 +1416,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         //初始化操作
         init();
 
+        //责任链执行
         if (filters.size() > 0) {
             FilterChainImpl filterChain = new FilterChainImpl(this);
             return filterChain.dataSource_connect(this, maxWaitMillis);
@@ -1427,8 +1437,9 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
     public DruidPooledConnection getConnectionDirect(long maxWaitMillis) throws SQLException {
         int notFullTimeoutRetryCnt = 0;
+        //死循环获取连接，直到达到重试次数或超出时间
         for (;;) {
-            // handle notFullTimeoutRetry
+            // handle notFullTimeoutRetry 未满超时时间内重试
             DruidPooledConnection poolableConnection;
             try {
                 poolableConnection = getConnectionInternal(maxWaitMillis);
@@ -1443,6 +1454,8 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 throw ex;
             }
 
+            //测试连接是否可用
+            //TODO？怎么测试的？
             if (testOnBorrow) {
                 boolean validate = testConnectionInternal(poolableConnection.holder, poolableConnection.conn);
                 if (!validate) {
@@ -1459,6 +1472,11 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                     continue;
                 }
 
+                //检查时会判断当前连接对象距离上次被使用的时间是否超过规定检查的时间，若超过，则进行检查一次
+                // 这个检查时间通过timeBetweenEvictionRunsMillis来控制，默认60s
+
+                //Q?: 上一步testOnBorrow官方说影响性能，那么testWhileIdle为什么不影响性能，调用的是同一个方法.testConnectionInternal。
+                //A:testOnBorrow是每次都要检查，频率太快影响性能。testWhileIdle是间隔时间段默认60S检查一次，频率降低。
                 if (testWhileIdle) {
                     final DruidConnectionHolder holder = poolableConnection.holder;
                     long currentTimeMillis             = System.currentTimeMillis();
@@ -1492,6 +1510,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                                 LOG.debug("skip not validate connection.");
                             }
 
+                            //丢弃连接
                             discardConnection(poolableConnection.holder);
                              continue;
                         }
