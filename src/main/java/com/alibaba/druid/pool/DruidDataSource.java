@@ -169,6 +169,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
     private boolean                          loadSpifilterSkip         = false;
     private volatile DataSourceDisableException disableException       = null;
 
+    //TODO? 这是有什么作用？
     protected static final AtomicLongFieldUpdater<DruidDataSource> recycleErrorCountUpdater
             = AtomicLongFieldUpdater.newUpdater(DruidDataSource.class, "recycleErrorCount");
     protected static final AtomicLongFieldUpdater<DruidDataSource> connectErrorCountUpdater
@@ -807,7 +808,12 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
         //加载驱动
         DruidDriver.getInstance();
 
-        //TODO?
+        //TODO? 实现两种不同方式
+        /**
+         * ReentrantLock.lockInterruptibly允许在等待时由其它线程调用等待线程的Thread.interrupt方法来中断等待线程的等待而直接返回，这时不用获取锁，
+         * 而会抛出一个InterruptedException。 ReentrantLock.lock方法不允许Thread.interrupt中断,即使检测到Thread.isInterrupted,一样会继续尝试获取锁，
+         * 失败则继续休眠。只是在最后获取锁成功后再把当前线程置为interrupted状态,然后再中断线程
+         */
         final ReentrantLock lock = this.lock;
         try {
             lock.lockInterruptibly();
@@ -822,7 +828,8 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             }
 
             initStackTrace = Utils.toString(Thread.currentThread().getStackTrace());
-
+            //生成DataSourceId
+            //TODO? Q ? DataSourceId的作用是什么
             this.id = DruidDriver.createDataSourceId();
             if (this.id > 1) {
                 long delta = (this.id - 1) * 100000;
@@ -837,7 +844,9 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 initFromWrapDriverUrl();
             }
 
-            //初始化配置的filter比如：StatFilter，WallFilter，LogFilter，ConfigFilter等
+            //初始化配置的filter比如：StatFilter，WallFilter，LogFilter，ConfigFilter等。并且给filter注入DataSource对象，使每个filter能够获取对应数据源属性
+            //支持自定义的filter，通过SPI机制自动加载。自定义的filter需要加@AutoLoad注解
+
             for (Filter filter : filters) {
                 filter.init(this);
             }
@@ -890,17 +899,21 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 this.driverClass = driverClass.trim();
             }
 
-            //TODO?
+            //通过spi机制加载自定义filter
+            //TODO? 什么是SPI机制？
             initFromSPIServiceLoader();
 
-            //TODO?
+            //重新加载driver
             resolveDriver();
 
             //初始化检查使用哪种数据库
             initCheck();
 
+            //初始化自定义异常，是属于mysql异常，还是其他数据库异常
             initExceptionSorter();
+            //初始化连接检查器，是属于mysql检查器，还是其他数据库检查器
             initValidConnectionChecker();
+            //只是检查一下属性，打个日志而已
             validationQueryCheck();
 
             if (isUseGlobalDataSourceStat()) {
@@ -917,6 +930,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             }
             dataSourceStat.setResetStatEnable(this.resetStatEnable);
 
+            //定义对象数组
             connections = new DruidConnectionHolder[maxActive];
             evictConnections = new DruidConnectionHolder[maxActive];
             keepAliveConnections = new DruidConnectionHolder[maxActive];
@@ -931,7 +945,9 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 // init connections
                 while (poolingCount < initialSize) {
                     try {
+                        //生成实际的连接对象
                         PhysicalConnectionInfo pyConnectInfo = createPhysicalConnection();
+                        //使用holder对实际对象再一次包装
                         DruidConnectionHolder holder = new DruidConnectionHolder(this, pyConnectInfo);
                         connections[poolingCount++] = holder;
                     } catch (SQLException ex) {
@@ -951,8 +967,12 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
                 }
             }
 
+            //TODO?这几个线程的作用是什么？
+            //收集监控指标的守护线程
             createAndLogThread();
+            //负责添加连接的守护线程
             createAndStartCreatorThread();
+            //负责丢弃连接的守护线程
             createAndStartDestroyThread();
 
             initedLatch.await();
@@ -1069,6 +1089,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
             return;
         }
 
+        //TODO? System.identityHashCode(this)原理
         String threadName = "Druid-ConnectionPool-Log-" + System.identityHashCode(this);
         logStatsThread = new LogStatsThread(threadName);
         logStatsThread.start();
@@ -2254,6 +2275,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
         for (;;) {
             if (poolingCount == 0) {
+                //池中可用连接为0 唤起添加链接的线程一次
                 emptySignal(); // send signal to CreateThread create connection
 
                 if (failFast && isFailContinuous()) {
@@ -2272,6 +2294,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
                 try {
                     long startEstimate = estimate;
+                    //TODO? notEmpty.awaitNanos(estimate)作用
                     estimate = notEmpty.awaitNanos(estimate); // signal by
                                                               // recycle or
                                                               // creator
@@ -2945,6 +2968,7 @@ public class DruidDataSource extends DruidAbstractDataSource implements DruidDat
 
         public LogStatsThread(String name){
             super(name);
+            //设置该线程为守护线程
             this.setDaemon(true);
         }
 

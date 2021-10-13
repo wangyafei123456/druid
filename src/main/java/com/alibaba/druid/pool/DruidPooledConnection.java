@@ -322,6 +322,10 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         }
     }
 
+    /**
+     * 回收连接
+     * @throws SQLException
+     */
     public void recycle() throws SQLException {
         if (this.disable) {
             return;

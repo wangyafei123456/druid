@@ -84,6 +84,9 @@ public class MySqlValidConnectionChecker extends ValidConnectionCheckerAdapter i
         this.usePingMethod = usePingMethod;
     }
 
+    /**
+     * 两种检测方式 1 通过驱动类中的ping方法检查  ；2 Statement.executeQuery()进行检查
+     */
     public boolean isValidConnection(Connection conn, String validateQuery, int validationQueryTimeout) throws Exception {
         if (conn.isClosed()) {
             return false;
